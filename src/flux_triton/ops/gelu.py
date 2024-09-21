@@ -23,19 +23,23 @@ else:
 
 @triton.jit
 def _geglu_tanh_forward_kernel(
-    a, b, c, stride, n_cols: tl.constexpr, BLOCK_SIZE: tl.constexpr
+    a,       
+    w1, 
+    b1, 
+    w2, 
+    b2, 
+    c, stride, n_cols: tl.constexpr, BLOCK_SIZE: tl.constexpr
 ):
     program_id = tl.program_id(0).cast(tl.int64)
 
     # locate start index
     a += program_id * stride
-    b += program_id * stride
     c += program_id * stride
 
     col_offsets = tl.arange(0, BLOCK_SIZE)
     mask = col_offsets < n_cols
     a_row = tl.load(a + col_offsets, mask=mask, other=0).to(tl.float32)
-    b_row = tl.load(b + col_offsets, mask=mask, other=0)
+    a_row = tl.dot(w1, a_row) + tl.trans(b1)
 
     # tanh approximation form of GELU is computed with:
     # 0.5 * a * (1 + tanh(sqrt(2 / pi) * (a + 0.044715 * a^3)))
@@ -46,6 +50,10 @@ def _geglu_tanh_forward_kernel(
     geglu_a = 0.5 * a_row * (1 + tanh_result)
     # c_row = geglu_a * b_row
     c_row = geglu_a
+
+    # 
+    c_row = c_row @ w2 + b2.t()
+
     tl.store(c + col_offsets, c_row, mask=mask)
 
 
@@ -93,12 +101,14 @@ def _geglu_tanh_backward_kernel(
     tl.store(b + col_offsets, db_row, mask=mask)
 
 
-def geglu_forward(a, b):
+def geglu_forward(a, w1, b1, w2, b2):
     ori_shape = a.shape
 
     n_cols = ori_shape[-1]
     a = a.view(-1, n_cols)
-    b = b.view(-1, n_cols)
+    print("shape of a", a.shape)
+    print("shape w1", w1.shape)
+    print("shape b1", b1.shape)
     c = torch.empty_like(a)
     n_rows = a.shape[0]
 
@@ -106,14 +116,17 @@ def geglu_forward(a, b):
 
     _geglu_tanh_forward_kernel[(n_rows,)](
         a,
-        b,
+        w1, 
+        b1, 
+        w2, 
+        b2,
         c,
         c.stride(-2),
         n_cols=n_cols,
         BLOCK_SIZE=BLOCK_SIZE,
         num_warps=num_warps,
     )
-    return a, b, c.view(*ori_shape)
+    return c.view(*ori_shape)
 
 
 def geglu_backward(a, b, dc):
@@ -140,9 +153,9 @@ def geglu_backward(a, b, dc):
 class LigerGELUMulFunction(torch.autograd.Function):
     @staticmethod
     @ensure_contiguous
-    def forward(ctx, a, b):
-        a, b, c = geglu_forward(a, b)
-        ctx.save_for_backward(a, b)
+    def forward(ctx, a, w1, b1, w2, b2):
+        c = geglu_forward(a, w1, b1, w2, b2)
+        # ctx.save_for_backward(a, b)
         return c
 
     @staticmethod

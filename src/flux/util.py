@@ -160,16 +160,16 @@ def load_flow_model(
         for k, v in sd.items():
             if 'double_blocks.' in k:
                 if 'img_mlp.0.weight' in k:
-                    new_k = k.replace('img_mlp.0.weight', 'img_mlp.up_proj.weight')
+                    new_k = k.replace('img_mlp.0.weight', 'img_mlp.w1.weight')
                     new_sd[new_k] = v
                 elif 'img_mlp.0.bias' in k:
-                    new_k = k.replace('img_mlp.0.bias', 'img_mlp.up_proj.bias')
+                    new_k = k.replace('img_mlp.0.bias', 'img_mlp.b1')
                     new_sd[new_k] = v
                 elif 'img_mlp.2.weight' in k:
-                    new_k = k.replace('img_mlp.2.weight', 'img_mlp.down_proj.weight')
+                    new_k = k.replace('img_mlp.2.weight', 'img_mlp.w2')
                     new_sd[new_k] = v
                 elif 'img_mlp.2.bias' in k:
-                    new_k = k.replace('img_mlp.2.bias', 'img_mlp.down_proj.bias')
+                    new_k = k.replace('img_mlp.2.bias', 'img_mlp.b2')
                     new_sd[new_k] = v
                 else:
                     new_sd[k] = v
