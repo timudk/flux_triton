@@ -3,9 +3,16 @@ from einops import rearrange
 from torch import Tensor
 import os
 from flux_triton.modules.rope import liger_rotary_pos_emb
+from flash_attn_interface import flash_attn_func
+
+def fa3(q, k, v):
+    q, k, v = [t.permute(0,2,1,3) for t in [q,k,v]]
+    out = flash_attn_func(q,k,v)[0]
+    return out.permute(0,2,1,3)
 
 def attention(q: Tensor, k: Tensor, v: Tensor, pe: Tensor) -> Tensor:
     triton_rope = os.getenv("TRITON_ROPE")
+    use_fa3 = os.getenv("FA3")
 
     if triton_rope:
         cos = pe[:, 0, :, :, 0, :].reshape(pe.shape[0], pe.shape[2], -1)
@@ -14,7 +21,10 @@ def attention(q: Tensor, k: Tensor, v: Tensor, pe: Tensor) -> Tensor:
     else:
         q, k = apply_rope(q, k, pe)
 
-    x = torch.nn.functional.scaled_dot_product_attention(q, k, v)
+    if use_fa3:
+        x = fa3(q, k, v)
+    else:
+        x = torch.nn.functional.scaled_dot_product_attention(q, k, v)
     x = rearrange(x, "B H L D -> B L (H D)")
 
     return x
