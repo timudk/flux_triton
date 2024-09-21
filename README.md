@@ -5,32 +5,6 @@ by Black Forest Labs: https://blackforestlabs.ai
 
 This repo contains minimal inference code to run text-to-image and image-to-image with our Flux latent rectified flow transformers.
 
-### Inference partners
-
-We are happy to partner with [Replicate](https://replicate.com/), [FAL](https://fal.ai/) and [Mystic](https://www.mystic.ai). You can sample our models using their services.
-Below we list relevant links.
-
-Replicate:
-
-- https://replicate.com/collections/flux
-- https://replicate.com/collections/flux-fine-tunes
-- https://replicate.com/black-forest-labs/flux-pro
-- https://replicate.com/black-forest-labs/flux-dev
-- https://replicate.com/black-forest-labs/flux-schnell
-
-FAL:
-
-- https://fal.ai/models/fal-ai/flux-pro
-- https://fal.ai/models/fal-ai/flux/dev
-- https://fal.ai/models/fal-ai/flux/schnell
-
-Mystic:
-
-- https://www.mystic.ai/black-forest-labs
-- https://www.mystic.ai/black-forest-labs/flux1-pro
-- https://www.mystic.ai/black-forest-labs/flux1-dev
-- https://www.mystic.ai/black-forest-labs/flux1-schnell
-
 ## Local installation
 
 ```bash
