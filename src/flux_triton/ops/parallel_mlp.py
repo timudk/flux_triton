@@ -6,19 +6,18 @@ import torch.nn.functional as F
 import math
 import triton
 import triton.language as tl
+from triton.language.math import tanh
 
 _kAlpha = math.sqrt(2 / math.pi)
 
 
-@triton.jit
-def tanh(x):
-    # Tanh is just a scaled sigmoid
-    return 2 * tl.sigmoid(2 * x) - 1
-
 
 @triton.jit
-def gelu_forward(x):
-    return 0.5 * x * (1 + tanh(_kAlpha * x * (1 + 0.044715 * x * x)))
+def gelu_forward(a_row):
+    a_cubed = a_row * a_row * a_row
+    tanh_arg = _kAlpha * (a_row + 0.044715 * a_cubed)
+    tanh_result = tanh(tanh_arg)
+    return 0.5 * a_row * (1 + tanh_result)
 
 
 @triton.jit
