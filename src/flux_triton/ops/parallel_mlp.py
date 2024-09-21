@@ -46,26 +46,25 @@ def fused_kernel(
     acc = tl.zeros([BLOCK_M, BLOCK_N], dtype=tl.float32)
 
     for k in range(0, K, BLOCK_K):
+        # Have a mask for the attention so we know where to load from
+        # for the fused attention/mlp outputs.
         k_idx = k + offs_k
         mask_k = k_idx < K
-
-        a = tl.zeros([BLOCK_M, BLOCK_K], dtype=tl.float32)
-
-        attn_mask = k_idx < C1
+        attn_mask = (k_idx < C1) & mask_k
         mlp_mask = (k_idx >= C1) & mask_k
 
-        if tl.sum(attn_mask):
-            k_attn = k_idx * attn_mask
-            a_ptrs_attn = attn_ptr + (offs_m[:, None] * stride_am + k_attn[None, :] * stride_ak)
-            a_attn = tl.load(a_ptrs_attn, mask=mask_m[:, None] & attn_mask[None, :], other=0.0)
-            a += a_attn
-        elif tl.sum(mlp_mask):
-            k_mlp = (k_idx - C1) * mlp_mask
-            a_ptrs_mlp = mlp_ptr + (offs_m[:, None] * stride_mm + k_mlp[None, :] * stride_mk)
-            mlp_vals = tl.load(a_ptrs_mlp, mask=mask_m[:, None] & mlp_mask[None, :], other=0.0)
-            a_mlp = gelu_forward(mlp_vals)
-            a += a_mlp
+        # this is just attention
+        k_attn = k_idx
+        a_ptrs_attn = attn_ptr + (offs_m[:, None] * stride_am + k_attn[None, :] * stride_ak)
+        a_attn = tl.load(a_ptrs_attn, mask=mask_m[:, None] & attn_mask[None, :], other=0.0)
 
+        # and this is the mlp + gelu
+        k_mlp = k_idx - C1
+        a_ptrs_mlp = mlp_ptr + (offs_m[:, None] * stride_mm + k_mlp[None, :] * stride_mk)
+        mlp_vals = tl.load(a_ptrs_mlp, mask=mask_m[:, None] & mlp_mask[None, :], other=0.0)
+        a_mlp = gelu_forward(mlp_vals)
+
+        a = a_attn + a_mlp
         b_ptrs = weight_ptr + (k_idx[:, None] * stride_wk + offs_n[None, :] * stride_wn)
         b = tl.load(b_ptrs, mask=mask_k[:, None] & mask_n[None, :], other=0.0)
         acc += tl.dot(a, b)
@@ -74,7 +73,7 @@ def fused_kernel(
     bias = tl.load(bias_ptrs, mask=mask_n, other=0.0)
     acc += bias[None, :]
 
-    acc *= gate
+    acc = acc * gate
     x_ptrs = x_ptr + (offs_m[:, None] * stride_xm + offs_n[None, :] * stride_xn)
     x_vals = tl.load(x_ptrs, mask=mask_m[:, None] & mask_n[None, :], other=0.0)
     acc += x_vals
@@ -87,9 +86,9 @@ def fused_gelu_mlp(attn, mlp, linear2, x, gate):
     """
     result = x + gate * linear2(torch.cat((attn, GELU(mlp, approximate="tanh")), -1))
     """
-    # Block sizes
-    BLOCK_M = 16
-    BLOCK_N = 32
+    # TODO: tune these variables
+    BLOCK_M = 128
+    BLOCK_N = 128
     BLOCK_K = 32
 
     M = attn.shape[0]
@@ -132,5 +131,4 @@ def fused_gelu_mlp(attn, mlp, linear2, x, gate):
         stride_om, stride_on,
         BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N, BLOCK_K=BLOCK_K,
     )
-
     return output
