@@ -155,7 +155,28 @@ def load_flow_model(
         print("Loading checkpoint")
         # load_sft doesn't support torch.device
         sd = load_sft(ckpt_path, device=str(device))
-        missing, unexpected = model.load_state_dict(sd, strict=False, assign=True)
+
+        new_sd = {}
+        for k, v in sd.items():
+            if 'double_blocks.' in k:
+                if 'img_mlp.0.weight' in k:
+                    new_k = k.replace('img_mlp.0.weight', 'img_mlp.up_proj.weight')
+                    new_sd[new_k] = v
+                elif 'img_mlp.0.bias' in k:
+                    new_k = k.replace('img_mlp.0.bias', 'img_mlp.up_proj.bias')
+                    new_sd[new_k] = v
+                elif 'img_mlp.2.weight' in k:
+                    new_k = k.replace('img_mlp.2.weight', 'img_mlp.down_proj.weight')
+                    new_sd[new_k] = v
+                elif 'img_mlp.2.bias' in k:
+                    new_k = k.replace('img_mlp.2.bias', 'img_mlp.down_proj.bias')
+                    new_sd[new_k] = v
+                else:
+                    new_sd[k] = v
+            else:
+                new_sd[k] = v
+
+        missing, unexpected = model.load_state_dict(new_sd, strict=False, assign=True)
         print_load_warning(missing, unexpected)
     return model
 
