@@ -238,7 +238,7 @@ def main(
         t1 = time.perf_counter()
 
         fn = output_name.format(idx=idx)
-        print(f"Done in {t1 - t0:.1f}s. Saving {fn}")
+        print(f"Done in {(t1 - t0)*1000:.1f} ms. Saving {fn}")
         # bring into PIL format and save
         x = x.clamp(-1, 1)
         x = embed_watermark(x.float())
