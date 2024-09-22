@@ -20,7 +20,7 @@ class LigerGELUMLP(nn.Module):
     def forward(self, x):
 
         b = LigerGELUMulFunction.apply(x, self.w1, self.b1)
-        print("b dtype", b.dtype)
+        # print("b dtype", b.dtype)
         b = b.to(dtype=torch.bfloat16)
         return self.down_proj(b)
         
