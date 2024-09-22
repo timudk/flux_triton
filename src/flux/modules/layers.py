@@ -181,11 +181,15 @@ class DoubleStreamBlock(nn.Module):
         )
 
         self.txt_norm2 = LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.txt_mlp = nn.Sequential(
-            nn.Linear(hidden_size, mlp_hidden_dim, bias=True),
-            nn.GELU(approximate="tanh"),
-            nn.Linear(mlp_hidden_dim, hidden_size, bias=True),
-        )
+
+        if TRITON_GELU:
+            self.txt_mlp = LigerGELUMLP(hidden_size, mlp_hidden_dim, bias=True)
+        else:
+            self.txt_mlp = nn.Sequential(
+                nn.Linear(hidden_size, mlp_hidden_dim, bias=True),
+                nn.GELU(approximate="tanh"),
+                nn.Linear(mlp_hidden_dim, hidden_size, bias=True),
+            )
 
     def forward(
         self, img: Tensor, txt: Tensor, vec: Tensor, pe: Tensor

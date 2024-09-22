@@ -173,6 +173,20 @@ def load_flow_model(
                     # new_k = k.replace('img_mlp.2.bias', 'img_mlp.b2')
                     new_k = k.replace('img_mlp.2.bias', 'img_mlp.down_proj.bias')
                     new_sd[new_k] = v
+                if 'txt_mlp.0.weight' in k:
+                    new_k = k.replace('txt_mlp.0.weight', 'txt_mlp.w1')
+                    new_sd[new_k] = v
+                elif 'txt_mlp.0.bias' in k:
+                    new_k = k.replace('txt_mlp.0.bias', 'txt_mlp.b1')
+                    new_sd[new_k] = v
+                elif 'txt_mlp.2.weight' in k:
+                    # new_k = k.replace('img_mlp.2.weight', 'img_mlp.w2')
+                    new_k = k.replace('txt_mlp.2.weight', 'txt_mlp.down_proj.weight')
+                    new_sd[new_k] = v
+                elif 'txt_mlp.2.bias' in k:
+                    # new_k = k.replace('img_mlp.2.bias', 'img_mlp.b2')
+                    new_k = k.replace('txt_mlp.2.bias', 'txt_mlp.down_proj.bias')
+                    new_sd[new_k] = v
                 else:
                     new_sd[k] = v
             else:

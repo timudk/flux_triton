@@ -89,10 +89,16 @@ def _geglu_tanh_forward_kernel(
         # Advance the ptrs to the next K block.
         a_ptrs += BLOCK_SIZE_K * stride_ak
         b_ptrs += BLOCK_SIZE_K * stride_bk
+
+        
     # You can fuse arbitrary activation functions here
     # while the accumulator is still in FP32!
     accumulator = gelu(accumulator)
-    c = accumulator.to(tl.float16)
+    c = accumulator.to(tl.bfloat16)
+
+
+
+    
 
     # -----------------------------------------------------------
     # Write back the block of the output matrix C with masks.
@@ -169,16 +175,16 @@ def geglu_forward(a, w, bias):
 
     n_cols = ori_shape[-1]
     
-    print("shape of a before", a.shape)
-    print("shape w", w.shape)
-    print("shape bias", bias.shape)
+    # print("shape of a before", a.shape)
+    # print("shape w", w.shape)
+    # print("shape bias", bias.shape)
     b = torch.permute(torch.cat([w, bias.unsqueeze(1)], dim=1), (1, 0))
-    print("shape b", b.shape)
+    # print("shape b", b.shape)
     a = torch.cat([a, torch.ones((1, a.shape[1], 1), device="cuda", dtype=a.dtype)], dim=2)
     
     a = a.view(-1, n_cols + 1)
     # Step 3: Concatenate the bias to the weights
-    print("shape of a", a.shape)
+    # print("shape of a", a.shape)
     c = torch.empty_like(a)
 
 
