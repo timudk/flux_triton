@@ -44,14 +44,23 @@ def rope(pos: Tensor, dim: int, theta: int) -> tuple[Tensor, Tensor]:
 
 def apply_rope(xq: Tensor, xk: Tensor, cos: Tensor, sin: Tensor) -> tuple[Tensor, Tensor]:
     # xq, xk: [b, h, n, d]
-    # cos, sin: [b, n, d // 2]
+    # cos, sin: [b, n, d//2]
 
     cos = cos.unsqueeze(1)
     sin = sin.unsqueeze(1)
 
-    xq_1, xq_2 = rearrange(xq.float(), "... (d k) -> k ... d 1", k=2)
-    xk_1, xk_2 = rearrange(xk.float(), "... (d k) -> k ... d 1", k=2)
+    xq_1, xq_2 = rearrange(xq.float(), "... (r k) -> k ... r 1", k=2)  # r = d//2
+    xk_1, xk_2 = rearrange(xk.float(), "... (r k) -> k ... r 1", k=2)  # r = d//2
+    # all of the above four tensors are of shape [b, h, n, d//2, 1]
 
-    xq_out = torch.stack((cos, sin), dim=-1) * xq_1 + torch.stack((-sin, cos), dim=-1) * xq_2
-    xk_out = torch.stack((cos, sin), dim=-1) * xk_1 + torch.stack((-sin, cos), dim=-1) * xk_2
-    return xq_out.reshape(*xq.shape).type_as(xq), xk_out.reshape(*xk.shape).type_as(xk)
+    cos_sin = torch.stack((cos, sin), dim=-1) # [b, 1, n, d//2, 2]
+    neg_sin_cos = torch.stack((-sin, cos), dim=-1) # [b, 1, n, d//2, 2]
+
+    xq_out = cos_sin * xq_1 + neg_sin_cos * xq_2
+    xk_out = cos_sin * xk_1 + neg_sin_cos * xk_2
+
+    xq_out = rearrange(xq_out, "... r k -> ... (r k)").type_as(xq)
+    xk_out = rearrange(xk_out, "... r k -> ... (r k)").type_as(xk)
+    # the above two tensors are of shape [b, h, n, d]
+
+    return xq_out, xk_out
