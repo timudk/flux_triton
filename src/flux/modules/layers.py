@@ -23,14 +23,14 @@ class EmbedND(nn.Module):
         self.theta = theta
         self.axes_dim = axes_dim
 
-    def forward(self, ids: Tensor) -> Tensor:
+    def forward(self, ids: Tensor) -> tuple[Tensor, Tensor]:
         n_axes = ids.shape[-1]
-        emb = torch.cat(
-            [rope(ids[..., i], self.axes_dim[i], self.theta) for i in range(n_axes)],
-            dim=-3,
-        )
 
-        return emb.unsqueeze(1)
+        cos_and_sin = [rope(ids[..., i], self.axes_dim[i], self.theta) for i in range(n_axes)]
+        cos = torch.cat([cos_and_sin[i][0] for i in range(n_axes)], dim=-1)
+        sin = torch.cat([cos_and_sin[i][1] for i in range(n_axes)], dim=-1)
+
+        return cos, sin
 
 
 def timestep_embedding(t: Tensor, dim, max_period=10000, time_factor: float = 1000.0):
@@ -109,11 +109,11 @@ class SelfAttention(nn.Module):
         self.norm = QKNorm(head_dim)
         self.proj = nn.Linear(dim, dim)
 
-    def forward(self, x: Tensor, pe: Tensor) -> Tensor:
+    def forward(self, x: Tensor, cos: Tensor, sin: Tensor) -> Tensor:
         qkv = self.qkv(x)
         q, k, v = rearrange(qkv, "B L (K H D) -> K B H L D", K=3, H=self.num_heads)
         q, k = self.norm(q, k, v)
-        x = attention(q, k, v, pe=pe)
+        x = attention(q, k, v, cos=cos, sin=sin)
         x = self.proj(x)
         return x
 
@@ -180,7 +180,7 @@ class DoubleStreamBlock(nn.Module):
         )
 
     def forward(
-        self, img: Tensor, txt: Tensor, vec: Tensor, pe: Tensor
+        self, img: Tensor, txt: Tensor, vec: Tensor, cos: Tensor, sin: Tensor
     ) -> tuple[Tensor, Tensor]:
         img_mod1, img_mod2 = self.img_mod(vec)
         txt_mod1, txt_mod2 = self.txt_mod(vec)
@@ -208,7 +208,7 @@ class DoubleStreamBlock(nn.Module):
         k = torch.cat((txt_k, img_k), dim=2)
         v = torch.cat((txt_v, img_v), dim=2)
 
-        attn = attention(q, k, v, pe=pe)
+        attn = attention(q, k, v, cos=cos, sin=sin)
         txt_attn, img_attn = attn[:, : txt.shape[1]], attn[:, txt.shape[1] :]
 
         # calculate the img bloks
@@ -258,7 +258,7 @@ class SingleStreamBlock(nn.Module):
         self.mlp_act = nn.GELU(approximate="tanh")
         self.modulation = Modulation(hidden_size, double=False)
 
-    def forward(self, x: Tensor, vec: Tensor, pe: Tensor) -> Tensor:
+    def forward(self, x: Tensor, vec: Tensor, cos: Tensor, sin: Tensor) -> Tensor:
         mod, _ = self.modulation(vec)
         x_mod = (1 + mod.scale) * self.pre_norm(x) + mod.shift
         qkv, mlp = torch.split(
@@ -269,7 +269,7 @@ class SingleStreamBlock(nn.Module):
         q, k = self.norm(q, k, v)
 
         # compute attention
-        attn = attention(q, k, v, pe=pe)
+        attn = attention(q, k, v, cos=cos, sin=sin)
         # compute activation in mlp stream, cat again and run second linear layer
         output = self.linear2(torch.cat((attn, self.mlp_act(mlp)), 2))
         return x + mod.gate * output
