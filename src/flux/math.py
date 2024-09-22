@@ -43,6 +43,9 @@ def rope(pos: Tensor, dim: int, theta: int) -> tuple[Tensor, Tensor]:
 
 
 def apply_rope(xq: Tensor, xk: Tensor, cos: Tensor, sin: Tensor) -> tuple[Tensor, Tensor]:
+    # xq, xk: [b, h, n, d]
+    # cos, sin: [b, n, d // 2]
+
     cos = cos.unsqueeze(1)
     sin = sin.unsqueeze(1)
 
