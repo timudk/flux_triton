@@ -10,9 +10,9 @@ class LigerLayerNorm(nn.Module):
         self.eps = eps
         assert not elementwise_affine
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, scale, shift):
         return LigerLayerNormFunction.apply(
-            hidden_states, self.eps
+            hidden_states, scale, shift, self.eps
         )
 
     def extra_repr(self):

@@ -159,7 +159,7 @@ class DoubleStreamBlock(nn.Module):
             dim=hidden_size, num_heads=num_heads, qkv_bias=qkv_bias
         )
 
-        self.img_norm2 = LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.img_norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.img_mlp = nn.Sequential(
             nn.Linear(hidden_size, mlp_hidden_dim, bias=True),
             nn.GELU(approximate="tanh"),
@@ -172,7 +172,7 @@ class DoubleStreamBlock(nn.Module):
             dim=hidden_size, num_heads=num_heads, qkv_bias=qkv_bias
         )
 
-        self.txt_norm2 = LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.txt_norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.txt_mlp = nn.Sequential(
             nn.Linear(hidden_size, mlp_hidden_dim, bias=True),
             nn.GELU(approximate="tanh"),
@@ -185,18 +185,25 @@ class DoubleStreamBlock(nn.Module):
         img_mod1, img_mod2 = self.img_mod(vec)
         txt_mod1, txt_mod2 = self.txt_mod(vec)
 
-        # prepare image for attention
-        img_modulated = self.img_norm1(img)
-        img_modulated = (1 + img_mod1.scale) * img_modulated + img_mod1.shift
+        if TRITON_LN:
+            img_modulated = self.img_norm1(img, img_mod1.scale, img_mod1.shift).unsqueeze(0)
+        else:
+            img_modulated = self.img_norm1(img)
+            img_modulated = (1 + img_mod1.scale) * img_modulated + img_mod1.shift
+
         img_qkv = self.img_attn.qkv(img_modulated)
         img_q, img_k, img_v = rearrange(
             img_qkv, "B L (K H D) -> K B H L D", K=3, H=self.num_heads
         )
         img_q, img_k = self.img_attn.norm(img_q, img_k, img_v)
 
-        # prepare txt for attention
-        txt_modulated = self.txt_norm1(txt)
-        txt_modulated = (1 + txt_mod1.scale) * txt_modulated + txt_mod1.shift
+
+        if TRITON_LN:
+            txt_modulated = self.txt_norm1(txt, txt_mod1.scale, txt_mod1.shift).unsqueeze(0)
+        else:
+            txt_modulated = self.txt_norm1(txt)
+            txt_modulated = (1 + txt_mod1.scale) * txt_modulated + txt_mod1.shift
+
         txt_qkv = self.txt_attn.qkv(txt_modulated)
         txt_q, txt_k, txt_v = rearrange(
             txt_qkv, "B L (K H D) -> K B H L D", K=3, H=self.num_heads
@@ -260,7 +267,11 @@ class SingleStreamBlock(nn.Module):
 
     def forward(self, x: Tensor, vec: Tensor, cos: Tensor, sin: Tensor) -> Tensor:
         mod, _ = self.modulation(vec)
-        x_mod = (1 + mod.scale) * self.pre_norm(x) + mod.shift
+
+        if TRITON_LN:
+            x_mod = self.pre_norm(x, mod.scale, mod.shift).unsqueeze(0)
+        else:
+            x_mod = (1 + mod.scale) * self.pre_norm(x) + mod.shift
         qkv, mlp = torch.split(
             self.linear1(x_mod), [3 * self.hidden_size, self.mlp_hidden_dim], dim=-1
         )
@@ -278,7 +289,7 @@ class SingleStreamBlock(nn.Module):
 class LastLayer(nn.Module):
     def __init__(self, hidden_size: int, patch_size: int, out_channels: int):
         super().__init__()
-        self.norm_final = LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.norm_final = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.linear = nn.Linear(
             hidden_size, patch_size * patch_size * out_channels, bias=True
         )
