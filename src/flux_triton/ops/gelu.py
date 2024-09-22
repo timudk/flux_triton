@@ -193,7 +193,7 @@ def geglu_forward(a, w, bias):
     M, K = a.shape
     K, N = b.shape
     # Allocates output.
-    c = torch.empty((M, N), device=a.device, dtype=torch.float16)
+    c = torch.empty((M, N), device=a.device, dtype=torch.bfloat16)
     # 1D launch kernel where each block gets its own program.
     grid = lambda META: (triton.cdiv(M, META['BLOCK_SIZE_M']) * triton.cdiv(N, META['BLOCK_SIZE_N']), )
 
