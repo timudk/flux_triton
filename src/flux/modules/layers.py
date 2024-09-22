@@ -15,6 +15,11 @@ if TRITON_LN:
 else:
     LayerNorm = nn.LayerNorm
 
+TRITON_GELU = os.getenv("TRITON_GELU")
+if TRITON_GELU:
+    from flux_triton.modules.gelu_mlp import LigerGELUMLP 
+
+
 
 class EmbedND(nn.Module):
     def __init__(self, dim: int, theta: int, axes_dim: list[int]):
@@ -160,11 +165,14 @@ class DoubleStreamBlock(nn.Module):
         )
 
         self.img_norm2 = LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.img_mlp = nn.Sequential(
-            nn.Linear(hidden_size, mlp_hidden_dim, bias=True),
-            nn.GELU(approximate="tanh"),
-            nn.Linear(mlp_hidden_dim, hidden_size, bias=True),
-        )
+        if TRITON_GELU:
+            self.img_mlp = LigerGELUMLP(hidden_size, mlp_hidden_dim, bias=True)
+        else:
+            self.img_mlp = nn.Sequential(
+                nn.Linear(hidden_size, mlp_hidden_dim, bias=True),
+                nn.GELU(approximate="tanh"),
+                nn.Linear(mlp_hidden_dim, hidden_size, bias=True),
+            )
 
         self.txt_mod = Modulation(hidden_size, double=True)
         self.txt_norm1 = LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
@@ -173,11 +181,15 @@ class DoubleStreamBlock(nn.Module):
         )
 
         self.txt_norm2 = LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.txt_mlp = nn.Sequential(
-            nn.Linear(hidden_size, mlp_hidden_dim, bias=True),
-            nn.GELU(approximate="tanh"),
-            nn.Linear(mlp_hidden_dim, hidden_size, bias=True),
-        )
+
+        if TRITON_GELU:
+            self.txt_mlp = LigerGELUMLP(hidden_size, mlp_hidden_dim, bias=True)
+        else:
+            self.txt_mlp = nn.Sequential(
+                nn.Linear(hidden_size, mlp_hidden_dim, bias=True),
+                nn.GELU(approximate="tanh"),
+                nn.Linear(mlp_hidden_dim, hidden_size, bias=True),
+            )
 
     def forward(
         self, img: Tensor, txt: Tensor, vec: Tensor, cos: Tensor, sin: Tensor
