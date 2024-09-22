@@ -4,9 +4,12 @@ from dataclasses import dataclass
 import torch
 from einops import rearrange
 from torch import Tensor, nn
+from flux_triton.ops.parallel_mlp import fused_gelu_mlp
 from flux_triton.modules.rms_norm import LigerRMSNorm
 import os
 from flux.math import attention, rope
+
+USE_FUSED_PARALLEL_GELU_FWD = os.getenv("USE_FUSED_PARALLEL_GELU_FWD", "0") == "1"
 
 TRITON_LN = os.getenv("TRITON_LN")
 if TRITON_LN:
@@ -270,9 +273,12 @@ class SingleStreamBlock(nn.Module):
 
         # compute attention
         attn = attention(q, k, v, pe=pe)
-        # compute activation in mlp stream, cat again and run second linear layer
-        output = self.linear2(torch.cat((attn, self.mlp_act(mlp)), 2))
-        return x + mod.gate * output
+        if USE_FUSED_PARALLEL_GELU_FWD:
+            return fused_gelu_mlp(attn, mlp, self.linear2, x, mod.gate)
+        else:
+            # compute activation in mlp stream, cat again and run second linear layer
+            output = self.linear2(torch.cat((attn, self.mlp_act(mlp)), 2))
+            return x + mod.gate * output
 
 
 class LastLayer(nn.Module):
